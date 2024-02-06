@@ -51,6 +51,10 @@ class Tile:
     def set_position(self, x, y):
         self.x = x
         self.y = y
+    
+    def reset_previous(self):
+        self.x = self.previous_x
+        self.y = self.previous_y
 
     def set_letter_score(self, value):
         self.letter_score = value

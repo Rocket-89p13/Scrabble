@@ -1,3 +1,4 @@
+import copy
 import pygame
 import random
 
@@ -7,6 +8,8 @@ from Dictionary import Dictionary
 
 # TODO
 # pass turn, exchange equal tile from the bag, game over
+# Blank tiles can be used as any single letter
+
 
 def init_tiles():
     tiles = []
@@ -65,6 +68,7 @@ def init_tiles():
     for i in range(2):
         tiles.append(Tile(' '))
     return tiles
+
 
 def init_board(num_tiles, width, height):
     board = [[Tile('', 0) for i in range(num_tiles)] for j in range(num_tiles)]
@@ -148,6 +152,7 @@ def init_board(num_tiles, width, height):
     board[3][0].set_letter_score(2)
     return board
 
+
 def fill_rack(tiles, cur_num_tiles):
     rack = []
     needed_tiles = 7 - cur_num_tiles
@@ -157,91 +162,122 @@ def fill_rack(tiles, cur_num_tiles):
         del tiles[rand_num]
     return rack
 
+
 def init_players(board, tiles, num_players, width, height):
     players = []
-    offset = 100 
+    offset = 100
     tile_width = (((width-(2*offset))//len(board)))
     tile_height = (((height-(2*offset))//len(board)))
     for i in range(num_players):
         player = Player()
         player.rack = fill_rack(tiles, len(player.rack))
         if i == 0:  # Player 0 is below the board
-            x = offset + ((len(board) - len(player.rack)) // 2) * (tile_width + 1)
+            x = offset + ((len(board) - len(player.rack)) //
+                          2) * (tile_width + 1)
             y = offset + 10 + (len(board)) * (tile_height + 1)
         elif i == 1:  # Player 1 is to the left of the board
-            x = offset - 10 -  (tile_width + 1)
-            y = offset + ((len(board) - len(player.rack)) // 2) * (tile_height + 1)
+            x = offset - 10 - (tile_width + 1)
+            y = offset + ((len(board) - len(player.rack)) //
+                          2) * (tile_height + 1)
         elif i == 2:  # Player 2 is above the board
-            x = offset + ((len(board) - len(player.rack)) // 2) * (tile_width + 1)
+            x = offset + ((len(board) - len(player.rack)) //
+                          2) * (tile_width + 1)
             y = offset - 10 - (tile_height + 1)
         elif i == 3:  # Player 3 is to the right of the board
             x = offset + 10 + (len(board)) * (tile_width + 1)
-            y = offset + ((len(board) - len(player.rack)) // 2) * (tile_height + 1)
+            y = offset + ((len(board) - len(player.rack)) //
+                          2) * (tile_height + 1)
         for j in range(0, len(player.rack), 1):
-                    if i == 0 or i == 2:  # Draw horizontally for players above and below the board
-                        player.rack[j].x = (j * (tile_width + 1)) + x
-                        player.rack[j].y = y
-                    else:  # Draw vertically for players to the left and right of the board
-                        player.rack[j].x = x
-                        player.rack[j].y = (j * (tile_height + 1)) + y
-                    player.rack[j].width = tile_width
-                    player.rack[j].height = tile_height
+            if i == 0 or i == 2:  # Draw horizontally for players above and below the board
+                player.rack[j].x = (j * (tile_width + 1)) + x
+                player.rack[j].y = y
+            else:  # Draw vertically for players to the left and right of the board
+                player.rack[j].x = x
+                player.rack[j].y = (j * (tile_height + 1)) + y
+            player.rack[j].width = tile_width
+            player.rack[j].height = tile_height
         players.append(player)
     return players
 
+
 def get_going(tiles, num_players):
-    best = 91  # min value 31 max value 90 unicode
+    # TODO
+    # blank tile wins start of the game
+    best = 91  # min value 31 max value 90 (unicode)
     going = 0
     for i in range(num_players):
-        score = ord('A') - ord(tiles[random.randint(0, len(tiles)-1)].character)
+        score = ord('A') - \
+            ord(tiles[random.randint(0, len(tiles)-1)].character)
         if (score < best):
             best = score
             going = i
     return going
 
-def reset_move():
+
+def reset_move(board, players, history):
+    # record object from history stack
+    # (board obj, prev (x, y) in board array)
+    # (player that played the tile, index of players rack where the tile was before previously)
+    if not history:
+        return
+    record = history.pop()
+    board_obj = record[0]
+    player_obj = record[1]
+    tile = board[board_obj[1][1]][board_obj[1][0]]
+    tile.reset_previous()
+    player_obj[0].rack[player_obj[1]] = tile
+
+    board[board_obj[1][1]][board_obj[1][0]] = board_obj[0]
     return
 
-def mouse(board, board_history, players, selected_tile, position, going):
+
+def mouse(board, history, players, selected_tile, position, going):
     for i in range(len(players)):
         for j in range(len(players[i].rack)):
-            if(players[i].rack[j].collision(position[0], position[1]) and going == i):
-                if(selected_tile[0] is not None):
-                    selected_tile[0].selected = False   
+            if (players[i].rack[j] is not None and players[i].rack[j].collision(position[0], position[1]) and going == i):
+                if (selected_tile[0] is not None):
+                    selected_tile[0].selected = False
                 selected_tile[0] = players[i].rack[j]
                 selected_tile[0].selected = True
                 break
     for i in range(len(board)):
         for j in range(len(board[i])):
-            if(board[i][j].collision(position[0], position[1]) and selected_tile[0] is not None and board[i][j].character == ''):
+            if (board[i][j].collision(position[0], position[1]) and selected_tile[0] is not None and board[i][j].character == ''):
                 board[i][j].set_previous()
-                board_history.append(board[i][j])
-                selected_tile[0].selected = False
                 selected_tile[0].set_previous()
+                player_tile_idx = players[going].rack.index(selected_tile[0])
+                history.append(
+                    ((copy.copy(board[i][j]), (j, i)), (players[going], player_tile_idx)))
+                selected_tile[0].selected = False
                 selected_tile[0].set_position(board[i][j].x, board[i][j].y)
+                # selected_tile[0].remove = True
                 board[i][j] = selected_tile[0]
-                selected_tile[0].remove = True
+                players[going].rack[player_tile_idx] = None
                 selected_tile[0] = None
                 break
     return
 
+
 def render(screen, font, board, players, submit_button):
-    screen.fill(pygame.Color('black')) # clear the screen from previous frame
+    screen.fill(pygame.Color('black'))  # clear the screen from previous frame
     for row in board:
         for tile in row:
             tile.render(screen, font)
-    
+
     for player in players:
         player.render(screen, font)
-    
+
     text_surface = font.render("submit", False, (0, 0, 0))
     pygame.draw.rect(screen, (227, 207, 170), submit_button)
-    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
+    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (
+        submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
     pygame.display.flip()
     return
 
+
 def main():
-    tile_values = {'a': 1,'b': 3,'c': 3,'d': 2,'e': 1,'f': 4,'g': 2,'h': 4,'i': 1,'j': 8,'k': 5,'l': 1,'m': 3,'n': 1,'o': 1,'p': 3,'q': 10,'r': 1,'s': 1,'t': 1,'u': 1,'v': 4,'w': 4,'x': 8,'y': 4,'z': 10,' ': 0}
+    tile_values = {'a': 1, 'b': 3, 'c': 3, 'd': 2, 'e': 1, 'f': 4, 'g': 2, 'h': 4, 'i': 1, 'j': 8, 'k': 5, 'l': 1, 'm': 3,
+                   'n': 1, 'o': 1, 'p': 3, 'q': 10, 'r': 1, 's': 1, 't': 1, 'u': 1, 'v': 4, 'w': 4, 'x': 8, 'y': 4, 'z': 10, ' ': 0}
     dictionary = Dictionary()
     pygame.init()
     WIDTH, HEIGHT, ROW_LEN, NUM_PLAYERS = 800, 800, 15, 2
@@ -253,8 +289,9 @@ def main():
     font = pygame.font.SysFont("monospace", 15)
     running = True
     button = (WIDTH - 100, HEIGHT - 50, 80, 40)
-    selected_tile = [None] # since this stupid language has no pass by reference need to put it in list to pass by reference or global variable
-    board_history = [] # save previous moves incase player undos move
+    # since this stupid language has no pass by reference need to put it in list to pass by reference or global variable
+    selected_tile = [None]
+    history = []  # save previous moves incase player undos move
     pygame.display.set_caption('Scrabble')
     print(going)
     while (running):
@@ -262,18 +299,24 @@ def main():
             if (event.type == pygame.QUIT):
                 running = False
             if (event.type == pygame.MOUSEBUTTONDOWN):
-                mouse(board, board_history, players, selected_tile, pygame.mouse.get_pos(), going)         
-                for player in players:
-                    player.rack = [tile for tile in player.rack if not tile.remove]       
-                if(button[0] <= pygame.mouse.get_pos()[0] <= button[0] + button[2] and button[1] <= pygame.mouse.get_pos()[1] <= button[1] + button[3]):
+                mouse(board, history, players, selected_tile,
+                      pygame.mouse.get_pos(), going)
+                # if(history):
+                #     print(history[0])
+                # for player in players:
+                #     player.rack = [tile for tile in player.rack if not tile.remove]
+                if (button[0] <= pygame.mouse.get_pos()[0] <= button[0] + button[2] and button[1] <= pygame.mouse.get_pos()[1] <= button[1] + button[3]):
+
                     # going = (going + 1) % NUM_PLAYERS
                     print("Submit")
             if (event.type == pygame.KEYDOWN):
                 if (event.key == pygame.K_r):
-                    reset_move()
+                    reset_move(board, players, history)
+
         render(screen, font, board, players, button)
     dictionary.close()
     pygame.quit()
     return
+
 
 main()

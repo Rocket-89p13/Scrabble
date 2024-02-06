@@ -5,4 +5,5 @@ class Player:
     
     def render(self, screen, font):
         for tile in self.rack:
-            tile.render(screen, font)
+            if(tile is not None):
+                tile.render(screen, font)
