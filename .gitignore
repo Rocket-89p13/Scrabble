@@ -1,6 +1,8 @@
+/.gitignore.txt
 /delete.py
 /dictionary.txt
 /scrabbledict.py
 /teststuff.py
 /words
+/code dump.txt
 /__pycache__
