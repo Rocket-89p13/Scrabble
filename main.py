@@ -7,8 +7,11 @@ from Tile import Tile
 from Dictionary import Dictionary
 
 # TODO
-# pass turn, exchange equal tile from the bag, game over
+# pass turn, shuffle tiles, exchange equal tile from the bag, game over
 # Blank tiles can be used as any single letter
+TILE_WIDTH = 0
+TILE_HEIGHT = 0
+first_move = True
 
 
 def init_tiles():
@@ -70,19 +73,18 @@ def init_tiles():
     return tiles
 
 
-def init_board(num_tiles, width, height):
-    board = [[Tile('', 0) for i in range(num_tiles)] for j in range(num_tiles)]
+def init_board(num_tiles):
+    global TILE_WIDTH, TILE_HEIGHT
+    board = [[Tile('') for i in range(num_tiles)] for j in range(num_tiles)]
     offset = 100
     # -1 to try and fix the int division problem of tile clipping off screen
-    tile_width = ((width-(2*offset))//len(board))
-    tile_height = ((height-(2*offset))//len(board))
     for i in range(0, len(board), 1):
         for j in range(0, len(board[i]), 1):
             # plus one below is to offset between the tile for grid effect
-            board[i][j].x = (j * (tile_width + 1)) + offset
-            board[i][j].y = (i * (tile_height + 1)) + offset
-            board[i][j].width = tile_width
-            board[i][j].height = tile_height
+            board[i][j].x = (j * (TILE_WIDTH + 1)) + offset
+            board[i][j].y = (i * (TILE_HEIGHT + 1)) + offset
+            board[i][j].width = TILE_WIDTH
+            board[i][j].height = TILE_HEIGHT
     board[0][0].set_word_score(3)
     board[1][1].set_word_score(2)
     board[2][2].set_word_score(2)
@@ -153,49 +155,58 @@ def init_board(num_tiles, width, height):
     return board
 
 
-def fill_rack(tiles, cur_num_tiles):
-    rack = []
-    needed_tiles = 7 - cur_num_tiles
+def fill_rack(tiles, player):
+    needed_tiles = 7 - len(player.rack)
     for i in range(needed_tiles):
         rand_num = random.randint(0, len(tiles)-1)
-        rack.append(tiles[rand_num])
+        player.rack.append(tiles[rand_num])
         del tiles[rand_num]
-    return rack
+    return
 
 
-def init_players(board, tiles, num_players, width, height):
+def set_player_rack_positions(player):
+    global TILE_WIDTH, TILE_HEIGHT
+    for i in range(len(player.rack)):
+        if (player.rack_direction == 0):
+            player.rack[i].set_position(
+                (i * (TILE_WIDTH + 1)) + player.rack_start_pos[0], player.rack_start_pos[1])
+        else:
+            player.rack[i].set_position(
+                player.rack_start_pos[0], (i * (TILE_HEIGHT + 1)) + player.rack_start_pos[1])
+        player.rack[i].width = TILE_WIDTH
+        player.rack[i].height = TILE_HEIGHT
+    return
+
+
+def init_players(board, tiles, num_players):
+    global TILE_WIDTH, TILE_HEIGHT
     players = []
     offset = 100
-    tile_width = (((width-(2*offset))//len(board)))
-    tile_height = (((height-(2*offset))//len(board)))
     for i in range(num_players):
         player = Player()
-        player.rack = fill_rack(tiles, len(player.rack))
+        fill_rack(tiles, player)
         if i == 0:  # Player 0 is below the board
             x = offset + ((len(board) - len(player.rack)) //
-                          2) * (tile_width + 1)
-            y = offset + 10 + (len(board)) * (tile_height + 1)
+                          2) * (TILE_WIDTH + 1)
+            y = offset + 10 + (len(board)) * (TILE_HEIGHT + 1)
+            player.rack_direction = 0
         elif i == 1:  # Player 1 is to the left of the board
-            x = offset - 10 - (tile_width + 1)
+            x = offset - 10 - (TILE_WIDTH + 1)
             y = offset + ((len(board) - len(player.rack)) //
-                          2) * (tile_height + 1)
+                          2) * (TILE_HEIGHT + 1)
+            player.rack_direction = 1
         elif i == 2:  # Player 2 is above the board
             x = offset + ((len(board) - len(player.rack)) //
-                          2) * (tile_width + 1)
-            y = offset - 10 - (tile_height + 1)
+                          2) * (TILE_WIDTH + 1)
+            y = offset - 10 - (TILE_HEIGHT + 1)
+            player.rack_direction = 0
         elif i == 3:  # Player 3 is to the right of the board
-            x = offset + 10 + (len(board)) * (tile_width + 1)
+            x = offset + 10 + (len(board)) * (TILE_WIDTH + 1)
             y = offset + ((len(board) - len(player.rack)) //
-                          2) * (tile_height + 1)
-        for j in range(0, len(player.rack), 1):
-            if i == 0 or i == 2:  # Draw horizontally for players above and below the board
-                player.rack[j].x = (j * (tile_width + 1)) + x
-                player.rack[j].y = y
-            else:  # Draw vertically for players to the left and right of the board
-                player.rack[j].x = x
-                player.rack[j].y = (j * (tile_height + 1)) + y
-            player.rack[j].width = tile_width
-            player.rack[j].height = tile_height
+                          2) * (TILE_HEIGHT + 1)
+            player.rack_direction = 1
+        player.rack_start_pos = (x, y)
+        set_player_rack_positions(player)
         players.append(player)
     return players
 
@@ -214,10 +225,115 @@ def get_going(tiles, num_players):
     return going
 
 
-def reset_move(board, players, history):
+def score_word(dictionary, word):
+    score = 0
+    for char in word:
+        score += dictionary[char]
+    return score
+
+
+def get_adjacent_letters(board, x, y, dx, dy):
+    word = ""
+    while (0 <= x < len(board) and 0 <= y < len(board[0]) and board[y][x].character != ''):
+        word += board[y][x].character
+        x += dx
+        y += dy
+    if (dx < 0 or dy < 0):
+        return word[::-1]
+    return word
+
+
+def get_between(board, x, y, dx, dy, end_x, end_y):
+    word = ""
+    while(0 <= x < len(board) and 0 <= y < len(board[0]) and x < end_x and y < end_y):
+        word+=board[y][x].character
+        x+=dx
+        y+=dy
+    return word
+
+
+def valid_move(dictionary, board, history):
+    if(not history or len(history) < 2):
+        print("word needs to be a minimum of 2 letters long")
+        return False
+    global first_move
+    adjacent_words = []
+    word = ""
+    intersections = 0
+    touches_center = False
+    history.sort(key=lambda pos: pos[0][1])
+    # direction: 0 - horizontal, 1 - vertical
+    direction = 1 if history[0][0][1][0] == history[len(history)-1][0][1][0] else (0 if history[0][0][1][1] == history[len(history)-1][0][1][1] else None)
+    for i in range(len(history)):
+        x = history[i][0][1][0]
+        y = history[i][0][1][1]
+        if(first_move and x == 7 and y == 7):
+            touches_center = True
+        if(i == 0):
+            pass
+        else:
+            prev_x = history[i-1][0][1][0]
+            prev_y = history[i-1][0][1][1]
+            if(x == prev_x):
+                if(y - prev_y != 1):
+                    chars_between = get_between(board, prev_x, prev_y + 1, 0, 1, x+1, y)
+                    if(chars_between == ""):
+                        print("Invalid word vertical gap between letters")
+                        return False
+                    else:
+                        word += chars_between
+                        intersections += 1
+                direction = 1
+            elif(y == prev_y):
+                if(x - prev_x != 1):
+                    chars_between = get_between(board, prev_x + 1, prev_y, 1, 0, x, y+1)
+                    if(chars_between == ""):
+                        print("Invalid word horizontal gap between letters")
+                        return False
+                    else:
+                        word += chars_between
+                        intersections += 1
+                direction = 0
+            else:
+                print("Invalid tiles change direction")
+                return False
+        word += board[y][x].character
+        adjacent_tile = ""
+        if (direction == 0):
+            adjacent_tile = get_adjacent_letters(board, x, y - 1, 0, -1) + board[y][x].character + get_adjacent_letters(board, x, y + 1, 0, 1)
+        elif (direction == 1):
+            adjacent_tile = get_adjacent_letters(board, x - 1, y, -1, 0) + board[y][x].character + get_adjacent_letters(board, x + 1, y, 1, 0)
+        if (adjacent_tile != board[y][x].character):
+            intersections+=1
+            adjacent_words.append(adjacent_tile)
+    adjacent_tile = ""
+    if (direction == 0):
+        adjacent_tile = get_adjacent_letters(board, history[0][0][1][0] - 1, history[0][0][1][1], -1, 0) + word + get_adjacent_letters(board, history[len(history)-1][0][1][0] + 1, history[len(history)-1][0][1][1], 1, 0)
+    elif (direction == 1):
+        adjacent_tile = get_adjacent_letters(board, history[0][0][1][0], history[0][0][1][1] - 1, 0, -1) + word + get_adjacent_letters(board, history[len(history)-1][0][1][0], history[len(history)-1][0][1][1] + 1, 0, 1)
+    if (adjacent_tile != word):
+        intersections+=1
+        word = adjacent_tile
+    else:
+        adjacent_words.append(word)
+    for w in adjacent_words:
+        result = dictionary.word_in_dictionary(w.lower())
+        if(not result):
+            print(w, "is not in the dictionary")
+            return False
+    if(first_move and not touches_center):
+        print("word must be played in the center of the board")
+        return False
+    elif(not first_move and intersections == 0):
+        print("word must intersect at least one tile on the board that has already been played")
+        return False
+    first_move = False
+    return True
+
+
+def reset_move(board, history):
     # record object from history stack
-    # (board obj, prev (x, y) in board array)
-    # (player that played the tile, index of players rack where the tile was before previously)
+    # (board obj, prev (x, y) in board array),(player that played the tile, prev index of tile in player.rack)
     if not history:
         return
     record = history.pop()
@@ -246,11 +362,9 @@ def mouse(board, history, players, selected_tile, position, going):
                 board[i][j].set_previous()
                 selected_tile[0].set_previous()
                 player_tile_idx = players[going].rack.index(selected_tile[0])
-                history.append(
-                    ((copy.copy(board[i][j]), (j, i)), (players[going], player_tile_idx)))
+                history.append(((copy.copy(board[i][j]), (j, i)), (players[going], player_tile_idx)))
                 selected_tile[0].selected = False
                 selected_tile[0].set_position(board[i][j].x, board[i][j].y)
-                # selected_tile[0].remove = True
                 board[i][j] = selected_tile[0]
                 players[going].rack[player_tile_idx] = None
                 selected_tile[0] = None
@@ -269,50 +383,49 @@ def render(screen, font, board, players, submit_button):
 
     text_surface = font.render("submit", False, (0, 0, 0))
     pygame.draw.rect(screen, (227, 207, 170), submit_button)
-    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (
-        submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
+    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
     pygame.display.flip()
     return
 
 
 def main():
+    global TILE_WIDTH, TILE_HEIGHT
     tile_values = {'a': 1, 'b': 3, 'c': 3, 'd': 2, 'e': 1, 'f': 4, 'g': 2, 'h': 4, 'i': 1, 'j': 8, 'k': 5, 'l': 1, 'm': 3,
                    'n': 1, 'o': 1, 'p': 3, 'q': 10, 'r': 1, 's': 1, 't': 1, 'u': 1, 'v': 4, 'w': 4, 'x': 8, 'y': 4, 'z': 10, ' ': 0}
     dictionary = Dictionary()
     pygame.init()
-    WIDTH, HEIGHT, ROW_LEN, NUM_PLAYERS = 800, 800, 15, 2
+    WIDTH, HEIGHT, OFFSET, ROW_LEN, NUM_PLAYERS = 800, 800, 100, 15, 2
+    TILE_WIDTH = ((WIDTH-(2*OFFSET))//ROW_LEN)
+    TILE_HEIGHT = ((HEIGHT-(2*OFFSET))//ROW_LEN)
     tiles = init_tiles()
-    board = init_board(ROW_LEN, WIDTH, HEIGHT)
-    players = init_players(board, tiles, NUM_PLAYERS, WIDTH, HEIGHT)
+    board = init_board(ROW_LEN)
+    players = init_players(board, tiles, NUM_PLAYERS)
     going = get_going(tiles, NUM_PLAYERS)
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     font = pygame.font.SysFont("monospace", 15)
     running = True
     button = (WIDTH - 100, HEIGHT - 50, 80, 40)
-    # since this stupid language has no pass by reference need to put it in list to pass by reference or global variable
+    # since this language has no obj pass by reference need to put it in list to pass by reference or global variable
     selected_tile = [None]
     history = []  # save previous moves incase player undos move
     pygame.display.set_caption('Scrabble')
-    print(going)
+    print("Player {}s Turn".format(going+1))
     while (running):
         for event in pygame.event.get():
             if (event.type == pygame.QUIT):
                 running = False
             if (event.type == pygame.MOUSEBUTTONDOWN):
-                mouse(board, history, players, selected_tile,
-                      pygame.mouse.get_pos(), going)
-                # if(history):
-                #     print(history[0])
-                # for player in players:
-                #     player.rack = [tile for tile in player.rack if not tile.remove]
+                mouse(board, history, players, selected_tile, pygame.mouse.get_pos(), going)
                 if (button[0] <= pygame.mouse.get_pos()[0] <= button[0] + button[2] and button[1] <= pygame.mouse.get_pos()[1] <= button[1] + button[3]):
-
-                    # going = (going + 1) % NUM_PLAYERS
-                    print("Submit")
+                    if (valid_move(dictionary, board, history)):
+                        history.clear()
+                        players[going].rack = [tile for tile in players[going].rack if tile is not None]
+                        fill_rack(tiles, players[going])
+                        set_player_rack_positions(players[going])
+                        print("Player {}s Turn".format(going+1))
             if (event.type == pygame.KEYDOWN):
                 if (event.key == pygame.K_r):
-                    reset_move(board, players, history)
-
+                    reset_move(board, history)
         render(screen, font, board, players, button)
     dictionary.close()
     pygame.quit()
