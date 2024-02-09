@@ -225,10 +225,10 @@ def get_going(tiles, num_players):
     return going
 
 
-def score_word(dictionary, word):
+def score_word(tile_values, word):
     score = 0
     for char in word:
-        score += dictionary[char]
+        score += tile_values[char.lower()]
     return score
 
 
@@ -245,89 +245,118 @@ def get_adjacent_letters(board, x, y, dx, dy):
 
 def get_between(board, x, y, dx, dy, end_x, end_y):
     word = ""
-    while(0 <= x < len(board) and 0 <= y < len(board[0]) and x < end_x and y < end_y):
-        word+=board[y][x].character
-        x+=dx
-        y+=dy
+    while (0 <= x < len(board) and 0 <= y < len(board[0]) and x < end_x and y < end_y):
+        word += board[y][x].character
+        x += dx
+        y += dy
     return word
 
 
-def valid_move(dictionary, board, history):
-    if(not history or len(history) < 2):
-        print("word needs to be a minimum of 2 letters long")
+def valid_move(dictionary, board, history, tile_values):
+    if (not history or len(history) < 2):
+        print("Word needs to be a minimum of 2 letters long")
         return False
+    
     global first_move
     adjacent_words = []
     word = ""
     intersections = 0
     touches_center = False
+    score = 0
+    word_score_multiplier = 1
+    
     history.sort(key=lambda pos: pos[0][1])
-    # direction: 0 - horizontal, 1 - vertical
-    direction = 1 if history[0][0][1][0] == history[len(history)-1][0][1][0] else (0 if history[0][0][1][1] == history[len(history)-1][0][1][1] else None)
-    for i in range(len(history)):
-        x = history[i][0][1][0]
-        y = history[i][0][1][1]
-        if(first_move and x == 7 and y == 7):
+    direction = 1 if history[0][0][1][0] == history[-1][0][1][0] else (0 if history[0][0][1][1] == history[-1][0][1][1] else None)
+    
+    for i, ((_, (x, y)), (_, _)) in enumerate(history):
+        if (first_move and x == 7 and y == 7):
             touches_center = True
-        if(i == 0):
-            pass
-        else:
-            prev_x = history[i-1][0][1][0]
-            prev_y = history[i-1][0][1][1]
-            if(x == prev_x):
-                if(y - prev_y != 1):
-                    chars_between = get_between(board, prev_x, prev_y + 1, 0, 1, x+1, y)
-                    if(chars_between == ""):
+        
+        if (i != 0):
+            prev_x, prev_y = history[i - 1][0][1]
+            if (x == prev_x):
+                if (y - prev_y != 1):
+                    chars_between = get_between(board, prev_x, prev_y + 1, 0, 1, x + 1, y)
+                    if (chars_between == ""):
                         print("Invalid word vertical gap between letters")
                         return False
                     else:
                         word += chars_between
+                        score += score_word(tile_values, chars_between)
                         intersections += 1
                 direction = 1
-            elif(y == prev_y):
-                if(x - prev_x != 1):
-                    chars_between = get_between(board, prev_x + 1, prev_y, 1, 0, x, y+1)
-                    if(chars_between == ""):
+            elif (y == prev_y):
+                if (x - prev_x != 1):
+                    chars_between = get_between(board, prev_x + 1, prev_y, 1, 0, x, y + 1)
+                    if (chars_between == ""):
                         print("Invalid word horizontal gap between letters")
                         return False
                     else:
                         word += chars_between
+                        score += score_word(tile_values, chars_between)
                         intersections += 1
                 direction = 0
             else:
                 print("Invalid tiles change direction")
                 return False
-        word += board[y][x].character
-        adjacent_tile = ""
+        
+        tile = board[y][x]
+        score += tile_values[tile.character.lower()] * tile.letter_score
+        word_score_multiplier *= tile.word_score
+        word += tile.character
+        
+        adjacent_tile, lhs, rhs = "", "", ""
         if (direction == 0):
-            adjacent_tile = get_adjacent_letters(board, x, y - 1, 0, -1) + board[y][x].character + get_adjacent_letters(board, x, y + 1, 0, 1)
+            lhs = get_adjacent_letters(board, x, y - 1, 0, -1)
+            rhs = get_adjacent_letters(board, x, y + 1, 0, 1)
+            adjacent_tile = lhs + tile.character + rhs
         elif (direction == 1):
-            adjacent_tile = get_adjacent_letters(board, x - 1, y, -1, 0) + board[y][x].character + get_adjacent_letters(board, x + 1, y, 1, 0)
-        if (adjacent_tile != board[y][x].character):
-            intersections+=1
+            lhs = get_adjacent_letters(board, x - 1, y, -1, 0)
+            rhs = get_adjacent_letters(board, x + 1, y, 1, 0)
+            adjacent_tile = lhs + tile.character + rhs
+        
+        if (adjacent_tile != tile.character):
+            intersections += 1
+            score += score_word(tile_values, lhs + rhs)
             adjacent_words.append(adjacent_tile)
-    adjacent_tile = ""
+        print(tile.character, score, tile.letter_score, tile.word_score, word_score_multiplier)
+    adjacent_tile, lhs, rhs = "", "", ""
     if (direction == 0):
-        adjacent_tile = get_adjacent_letters(board, history[0][0][1][0] - 1, history[0][0][1][1], -1, 0) + word + get_adjacent_letters(board, history[len(history)-1][0][1][0] + 1, history[len(history)-1][0][1][1], 1, 0)
+        lhs = get_adjacent_letters(board, history[0][0][1][0] - 1, history[0][0][1][1], -1, 0)
+        rhs = get_adjacent_letters(board, history[-1][0][1][0] + 1, history[-1][0][1][1], 1, 0)
+        adjacent_tile = lhs + word + rhs
     elif (direction == 1):
-        adjacent_tile = get_adjacent_letters(board, history[0][0][1][0], history[0][0][1][1] - 1, 0, -1) + word + get_adjacent_letters(board, history[len(history)-1][0][1][0], history[len(history)-1][0][1][1] + 1, 0, 1)
+        lhs = get_adjacent_letters(board, history[0][0][1][0], history[0][0][1][1] - 1, 0, -1)
+        rhs = get_adjacent_letters(board, history[-1][0][1][0], history[-1][0][1][1] + 1, 0, 1)
+        adjacent_tile = lhs + word + rhs
+    
     if (adjacent_tile != word):
-        intersections+=1
+        intersections += 1
+        score += score_word(tile_values, lhs + rhs)
         word = adjacent_tile
     else:
         adjacent_words.append(word)
+    
     for w in adjacent_words:
         result = dictionary.word_in_dictionary(w.lower())
-        if(not result):
+        if (not result):
             print(w, "is not in the dictionary")
             return False
-    if(first_move and not touches_center):
-        print("word must be played in the center of the board")
+    
+    if (first_move and not touches_center):
+        print("Word must be played in the center of the board")
         return False
-    elif(not first_move and intersections == 0):
-        print("word must intersect at least one tile on the board that has already been played")
+    elif (not first_move and intersections == 0):
+        print("Word must intersect at least one tile on the board that has already been played")
         return False
+    
     first_move = False
+    score *= word_score_multiplier
+    if (len(history) == 7):
+        score += 50
+    
+    history[0][1][0].score += score
+    print(history[0][1][0].score, score)
     return True
 
 
@@ -365,6 +394,8 @@ def mouse(board, history, players, selected_tile, position, going):
                 history.append(((copy.copy(board[i][j]), (j, i)), (players[going], player_tile_idx)))
                 selected_tile[0].selected = False
                 selected_tile[0].set_position(board[i][j].x, board[i][j].y)
+                selected_tile[0].letter_score = board[i][j].letter_score
+                selected_tile[0].word_score = board[i][j].word_score
                 board[i][j] = selected_tile[0]
                 players[going].rack[player_tile_idx] = None
                 selected_tile[0] = None
@@ -383,7 +414,8 @@ def render(screen, font, board, players, submit_button):
 
     text_surface = font.render("submit", False, (0, 0, 0))
     pygame.draw.rect(screen, (227, 207, 170), submit_button)
-    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
+    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (
+        submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
     pygame.display.flip()
     return
 
@@ -402,7 +434,7 @@ def main():
     players = init_players(board, tiles, NUM_PLAYERS)
     going = get_going(tiles, NUM_PLAYERS)
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    font = pygame.font.SysFont("monospace", 15)
+    font = pygame.font.SysFont("Calibri", 15)
     running = True
     button = (WIDTH - 100, HEIGHT - 50, 80, 40)
     # since this language has no obj pass by reference need to put it in list to pass by reference or global variable
@@ -410,18 +442,37 @@ def main():
     history = []  # save previous moves incase player undos move
     pygame.display.set_caption('Scrabble')
     print("Player {}s Turn".format(going+1))
+    test_str = "".join(tile.character.lower() for tile in players[going].rack)
+    valid_words = dictionary.get_valid_words(test_str)
+    valid_words.sort(key=lambda word: score_word(tile_values, word))
+    print(test_str)
+    for word in valid_words:
+        print(word, score_word(tile_values, word))
+    print()
     while (running):
         for event in pygame.event.get():
             if (event.type == pygame.QUIT):
                 running = False
             if (event.type == pygame.MOUSEBUTTONDOWN):
-                mouse(board, history, players, selected_tile, pygame.mouse.get_pos(), going)
+                mouse(board, history, players, selected_tile,
+                      pygame.mouse.get_pos(), going)
                 if (button[0] <= pygame.mouse.get_pos()[0] <= button[0] + button[2] and button[1] <= pygame.mouse.get_pos()[1] <= button[1] + button[3]):
-                    if (valid_move(dictionary, board, history)):
+                    if (valid_move(dictionary, board, history, tile_values)):
                         history.clear()
-                        players[going].rack = [tile for tile in players[going].rack if tile is not None]
+                        players[going].rack = [
+                            tile for tile in players[going].rack if tile is not None]
                         fill_rack(tiles, players[going])
                         set_player_rack_positions(players[going])
+                        for i in range (len(players)):
+                            print("Player {} score {}".format(i, players[i].score))
+                        going = (going + 1) % NUM_PLAYERS
+                        test_str = "".join(tile.character.lower() for tile in players[going].rack)
+                        print(test_str)
+                        valid_words = dictionary.get_valid_words(test_str)
+                        valid_words.sort(
+                            key=lambda word: score_word(tile_values, word))
+                        for word in valid_words:
+                            print(word, score_word(tile_values, word))
                         print("Player {}s Turn".format(going+1))
             if (event.type == pygame.KEYDOWN):
                 if (event.key == pygame.K_r):
