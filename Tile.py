@@ -8,8 +8,8 @@ class Tile:
         self.y = y
         self.width = width
         self.height = height
-        self.word_score = 0
-        self.letter_score = 0
+        self.word_score = 1
+        self.letter_score = 1
         self.DEFAULT_COLOR = (227, 207, 170)
         self.color = self.DEFAULT_COLOR
         self.remove = False
@@ -19,13 +19,13 @@ class Tile:
 
     def render(self, screen, font):
         text = self.character
-        if (self.letter_score > 0):
+        if (self.letter_score > 1 and self.character == ''):
             text = "{}".format(self.letter_score)
             if (self.letter_score == 2):
                 self.color = pygame.Color('deepskyblue')
             elif (self.letter_score == 3):
                 self.color = pygame.Color('blue')
-        elif (self.word_score > 0):
+        elif (self.word_score > 1 and self.character == ''):
             text = "{}".format(self.word_score)
             if (self.word_score == 2):
                 self.color = pygame.Color('deeppink')
