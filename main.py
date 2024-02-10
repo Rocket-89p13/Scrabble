@@ -263,8 +263,8 @@ def valid_move(dictionary, board, history, tile_values):
     intersections = 0
     touches_center = False
     score = 0
-    word_score_multiplier = 1
-    
+    adjacent_word_score = 0
+    word_score_multiplier = 1    
     history.sort(key=lambda pos: pos[0][1])
     direction = 1 if history[0][0][1][0] == history[-1][0][1][0] else (0 if history[0][0][1][1] == history[-1][0][1][1] else None)
     
@@ -317,9 +317,8 @@ def valid_move(dictionary, board, history, tile_values):
         
         if (adjacent_tile != tile.character):
             intersections += 1
-            score += score_word(tile_values, lhs + rhs)
+            adjacent_word_score += (score_word(tile_values, lhs + rhs) + (tile_values[tile.character.lower()] * tile.letter_score)) * tile.word_score
             adjacent_words.append(adjacent_tile)
-        print(tile.character, score, tile.letter_score, tile.word_score, word_score_multiplier)
     adjacent_tile, lhs, rhs = "", "", ""
     if (direction == 0):
         lhs = get_adjacent_letters(board, history[0][0][1][0] - 1, history[0][0][1][1], -1, 0)
@@ -352,11 +351,10 @@ def valid_move(dictionary, board, history, tile_values):
     
     first_move = False
     score *= word_score_multiplier
-    if (len(history) == 7):
+    score += adjacent_word_score
+    if(len(history) == 7):
         score += 50
-    
     history[0][1][0].score += score
-    print(history[0][1][0].score, score)
     return True
 
 
@@ -371,7 +369,7 @@ def reset_move(board, history):
     tile = board[board_obj[1][1]][board_obj[1][0]]
     tile.reset_previous()
     player_obj[0].rack[player_obj[1]] = tile
-
+    
     board[board_obj[1][1]][board_obj[1][0]] = board_obj[0]
     return
 
@@ -414,16 +412,14 @@ def render(screen, font, board, players, submit_button):
 
     text_surface = font.render("submit", False, (0, 0, 0))
     pygame.draw.rect(screen, (227, 207, 170), submit_button)
-    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (
-        submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
+    screen.blit(text_surface, (submit_button[0], submit_button[1], submit_button[0] + (submit_button[2]//2), submit_button[1] + (submit_button[3]//2)))
     pygame.display.flip()
     return
 
 
 def main():
     global TILE_WIDTH, TILE_HEIGHT
-    tile_values = {'a': 1, 'b': 3, 'c': 3, 'd': 2, 'e': 1, 'f': 4, 'g': 2, 'h': 4, 'i': 1, 'j': 8, 'k': 5, 'l': 1, 'm': 3,
-                   'n': 1, 'o': 1, 'p': 3, 'q': 10, 'r': 1, 's': 1, 't': 1, 'u': 1, 'v': 4, 'w': 4, 'x': 8, 'y': 4, 'z': 10, ' ': 0}
+    tile_values = {'a': 1, 'b': 3, 'c': 3, 'd': 2, 'e': 1, 'f': 4, 'g': 2, 'h': 4, 'i': 1, 'j': 8, 'k': 5, 'l': 1, 'm': 3, 'n': 1, 'o': 1, 'p': 3, 'q': 10, 'r': 1, 's': 1, 't': 1, 'u': 1, 'v': 4, 'w': 4, 'x': 8, 'y': 4, 'z': 10, ' ': 0}
     dictionary = Dictionary()
     pygame.init()
     WIDTH, HEIGHT, OFFSET, ROW_LEN, NUM_PLAYERS = 800, 800, 100, 15, 2
@@ -454,13 +450,11 @@ def main():
             if (event.type == pygame.QUIT):
                 running = False
             if (event.type == pygame.MOUSEBUTTONDOWN):
-                mouse(board, history, players, selected_tile,
-                      pygame.mouse.get_pos(), going)
+                mouse(board, history, players, selected_tile, pygame.mouse.get_pos(), going)
                 if (button[0] <= pygame.mouse.get_pos()[0] <= button[0] + button[2] and button[1] <= pygame.mouse.get_pos()[1] <= button[1] + button[3]):
                     if (valid_move(dictionary, board, history, tile_values)):
                         history.clear()
-                        players[going].rack = [
-                            tile for tile in players[going].rack if tile is not None]
+                        players[going].rack = [tile for tile in players[going].rack if tile is not None]
                         fill_rack(tiles, players[going])
                         set_player_rack_positions(players[going])
                         for i in range (len(players)):
@@ -469,8 +463,7 @@ def main():
                         test_str = "".join(tile.character.lower() for tile in players[going].rack)
                         print(test_str)
                         valid_words = dictionary.get_valid_words(test_str)
-                        valid_words.sort(
-                            key=lambda word: score_word(tile_values, word))
+                        valid_words.sort(key=lambda word: score_word(tile_values, word))
                         for word in valid_words:
                             print(word, score_word(tile_values, word))
                         print("Player {}s Turn".format(going+1))
